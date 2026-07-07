@@ -5,14 +5,17 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 
 import { navigationTools, type NavigationToolSlug } from "@/constant/navigation-tools";
+import { AccessCodeModal } from "@/components/layout/access-code-modal";
 import { AppConfigModal } from "@/components/layout/app-config-modal";
 import { MobileNavDrawer } from "@/components/layout/mobile-nav-drawer";
 import { UserStatusActions } from "@/components/layout/user-status-actions";
 import { cn } from "@/lib/utils";
+import { useServerModeStore } from "@/stores/use-server-mode-store";
 import { useState } from "react";
 
 export function AppTopNav() {
     const pathname = usePathname();
+    const serverModeStatus = useServerModeStore((state) => state.status);
     const [mobileNavOpen, setMobileNavOpen] = useState(false);
     const hideHeader = /^\/canvas\/[^/]+/.test(pathname);
     const slug = pathname.split("/").filter(Boolean)[0];
@@ -76,7 +79,7 @@ export function AppTopNav() {
             ) : null}
 
             <MobileNavDrawer open={mobileNavOpen} activeToolSlug={activeToolSlug} onClose={() => setMobileNavOpen(false)} />
-            <AppConfigModal />
+            {serverModeStatus === "on" ? <AccessCodeModal /> : <AppConfigModal />}
         </>
     );
 }
