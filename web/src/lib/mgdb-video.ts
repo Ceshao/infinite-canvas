@@ -1,0 +1,56 @@
+import { normalizeSeedanceRatio } from "@/lib/seedance-video";
+import { modelOptionName, resolveModelRequestConfig, type AiConfig } from "@/stores/use-config-store";
+
+export const MGDB_UPSTREAM_MODEL = "sd_2.0_fast";
+export const MGDB_REFERENCE_IMAGE_LIMIT = 9;
+
+export const mgdbRatioOptions = [
+    { value: "16:9", label: "横屏" },
+    { value: "9:16", label: "竖屏" },
+    { value: "1:1", label: "方形" },
+    { value: "4:3", label: "标准横屏" },
+    { value: "3:4", label: "标准竖屏" },
+    { value: "21:9", label: "宽银幕" },
+] as const;
+
+export const mgdbDurationOptions = [5, 10, 15] as const;
+
+const mgdbPixels: Record<string, string> = {
+    "16:9": "1280x720",
+    "9:16": "720x1280",
+    "1:1": "960x960",
+    "4:3": "1112x834",
+    "3:4": "834x1112",
+    "21:9": "1470x630",
+};
+
+export function isMgdbVideoModel(model: string) {
+    return modelOptionName(model).toLowerCase().includes("mgdb");
+}
+
+export function isMgdbVideoConfig(config: AiConfig | Pick<AiConfig, "model" | "videoModel">) {
+    const requestConfig = "channels" in config ? resolveModelRequestConfig(config, config.model || config.videoModel) : config;
+    return isMgdbVideoModel(requestConfig.model || requestConfig.videoModel);
+}
+
+export function normalizeMgdbRatio(value: string) {
+    const ratio = normalizeSeedanceRatio(value);
+    return ratio === "adaptive" ? "16:9" : ratio;
+}
+
+export function normalizeMgdbDuration(value: string) {
+    const seconds = Math.floor(Number(value)) || 5;
+    return mgdbDurationOptions.reduce<(typeof mgdbDurationOptions)[number]>((best, item) => (Math.abs(item - seconds) < Math.abs(best - seconds) ? item : best), mgdbDurationOptions[0]);
+}
+
+export function mgdbPixelLabel(ratio: string) {
+    return mgdbPixels[normalizeMgdbRatio(ratio)] || "";
+}
+
+// 服务器模式下渠道 baseUrl 固定为 /api/ai（转发到 new-api），MGDB 网关协议
+// 与 new-api 不兼容，需改走专用代理 /api/mgdb；直连网关时去掉误填的 /v1 后缀。
+export function mgdbGatewayBaseUrl(baseUrl: string) {
+    const normalized = (baseUrl || "").trim().replace(/\/+$/, "");
+    if (/\/api\/ai$/i.test(normalized) || normalized === "") return `${normalized.replace(/\/api\/ai$/i, "")}/api/mgdb`;
+    return normalized.replace(/\/v1$/i, "");
+}

@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 
-import { buildForwardHeaders, buildUpstreamUrl, parseAccessCodes, parseModelsPayload, readAccessCode, readServerProxyConfig, safeEqualSecret } from "@/lib/ai-proxy";
+import { buildForwardHeaders, buildUpstreamUrl, parseAccessCodes, parseModelsPayload, readAccessCode, readMgdbProxyConfig, readServerProxyConfig, safeEqualSecret } from "@/lib/ai-proxy";
 
 describe("parseAccessCodes", () => {
     test("按逗号分隔并去除空白项", () => {
@@ -23,6 +23,21 @@ describe("readServerProxyConfig", () => {
     test("任一变量缺失返回 null", () => {
         expect(readServerProxyConfig({ ...env, AI_PROXY_UPSTREAM_BASE_URL: "" })).toBeNull();
         expect(readServerProxyConfig({ ...env, AI_PROXY_API_KEY: undefined })).toBeNull();
+    });
+});
+
+describe("readMgdbProxyConfig", () => {
+    test("只配 API Key 时上游默认 gw.amlig.com", () => {
+        expect(readMgdbProxyConfig({ AI_PROXY_MGDB_API_KEY: "mgdb-key" })).toEqual({ upstreamBaseUrl: "https://gw.amlig.com", apiKey: "mgdb-key" });
+    });
+
+    test("可覆盖上游地址并去除尾斜杠", () => {
+        expect(readMgdbProxyConfig({ AI_PROXY_MGDB_UPSTREAM_BASE_URL: "https://gw.example.com/", AI_PROXY_MGDB_API_KEY: "mgdb-key" })).toEqual({ upstreamBaseUrl: "https://gw.example.com", apiKey: "mgdb-key" });
+    });
+
+    test("缺少 API Key 返回 null（代理未启用）", () => {
+        expect(readMgdbProxyConfig({})).toBeNull();
+        expect(readMgdbProxyConfig({ AI_PROXY_MGDB_API_KEY: "  " })).toBeNull();
     });
 });
 

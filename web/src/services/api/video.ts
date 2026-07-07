@@ -3,6 +3,7 @@ import axios from "axios";
 import { dataUrlToFile } from "@/lib/image-utils";
 import { getMediaBlob, uploadMediaFile, type UploadedFile } from "@/services/file-storage";
 import { imageToDataUrl } from "@/services/image-storage";
+import { isMgdbVideoConfig, mgdbGatewayBaseUrl, normalizeMgdbDuration, normalizeMgdbRatio, MGDB_REFERENCE_IMAGE_LIMIT, MGDB_UPSTREAM_MODEL } from "@/lib/mgdb-video";
 import { boolConfig, buildSeedancePromptText, isSeedanceVideoConfig, normalizeSeedanceDuration, normalizeSeedanceRatio, normalizeSeedanceResolution, seedanceVideoReferenceError, SEEDANCE_REFERENCE_LIMITS } from "@/lib/seedance-video";
 import { buildApiUrl, modelOptionName, resolveModelRequestConfig, type AiConfig } from "@/stores/use-config-store";
 import type { ReferenceImage } from "@/types/image";
@@ -17,10 +18,16 @@ type SeedanceTask = {
     content?: { video_url?: string; last_frame_url?: string } | null;
 };
 type ApiEnvelope<T> = T | { code?: number; data?: T | null; msg?: string };
+type MgdbTask = {
+    task_id?: string;
+    status?: "dispatched" | "processing" | "completed" | "failed";
+    result?: { url?: string } | null;
+    error?: string | null;
+};
 type RequestOptions = { signal?: AbortSignal };
 
 export type VideoGenerationResult = { blob?: Blob; url?: string; mimeType?: string };
-export type VideoGenerationTask = { id: string; provider: "openai" | "seedance"; model: string };
+export type VideoGenerationTask = { id: string; provider: "openai" | "seedance" | "mgdb"; model: string };
 export type VideoGenerationTaskState = { status: "pending" } | { status: "completed"; result: VideoGenerationResult } | { status: "failed"; error: string };
 
 function aiApiUrl(config: AiConfig, path: string) {
@@ -36,13 +43,13 @@ function aiHeaders(config: AiConfig, contentType?: string) {
 
 export async function requestVideoGeneration(config: AiConfig, prompt: string, references: ReferenceImage[] = [], videoReferences: ReferenceVideo[] = [], audioReferences: ReferenceAudio[] = [], options?: RequestOptions): Promise<VideoGenerationResult> {
     const task = await createVideoGenerationTask(config, prompt, references, videoReferences, audioReferences, options);
-    const delayMs = task.provider === "seedance" ? 5000 : 2500;
+    const delayMs = task.provider === "openai" ? 2500 : 5000;
     for (let attempt = 0; attempt < 120; attempt += 1) {
         if (options?.signal?.aborted) throw new DOMException("Aborted", "AbortError");
         const state = await pollVideoGenerationTask(config, task, options);
         if (state.status === "completed") return state.result;
         if (state.status === "failed") throw new Error(state.error);
-        if (attempt === 119) throw new Error(`${task.provider === "seedance" ? "Seedance " : ""}视频生成超时，请稍后重试`);
+        if (attempt === 119) throw new Error(`${providerLabel(task.provider)}视频生成超时，请稍后重试`);
         await delay(delayMs, options?.signal);
     }
     throw new Error("视频生成超时，请稍后重试");
@@ -52,6 +59,12 @@ export async function createVideoGenerationTask(config: AiConfig, prompt: string
     const selectedModel = (config.model || config.videoModel).trim();
     const requestConfig = resolveModelRequestConfig(config, selectedModel);
     assertVideoConfig(requestConfig, requestConfig.model);
+    if (isMgdbVideoConfig(requestConfig)) {
+        if (videoReferences.length || audioReferences.length) {
+            throw new Error("MGDB 视频通道仅支持参考图，请移除参考视频/音频，或切换到 Seedance 2.0 / 火山 Agent Plan 模型");
+        }
+        return createMgdbTask(requestConfig, selectedModel, prompt, references, options);
+    }
     if (isSeedanceVideoConfig(requestConfig)) {
         return createSeedanceTask(requestConfig, selectedModel, prompt, references, videoReferences, audioReferences, options);
     }
@@ -64,6 +77,7 @@ export async function createVideoGenerationTask(config: AiConfig, prompt: string
 export async function pollVideoGenerationTask(config: AiConfig, task: VideoGenerationTask, options?: RequestOptions): Promise<VideoGenerationTaskState> {
     const requestConfig = resolveModelRequestConfig(config, task.model);
     assertVideoConfig(requestConfig, requestConfig.model);
+    if (task.provider === "mgdb") return pollMgdbTask(requestConfig, task, options);
     return task.provider === "seedance" ? pollSeedanceTask(requestConfig, task, options) : pollOpenAIVideoTask(requestConfig, task, options);
 }
 
@@ -147,6 +161,74 @@ async function pollSeedanceTask(config: AiConfig, task: VideoGenerationTask, opt
     } catch (error) {
         throw new Error(readAxiosError(error, "Seedance 任务查询失败"));
     }
+}
+
+function mgdbApiUrl(config: AiConfig, path: string) {
+    return `${mgdbGatewayBaseUrl(config.baseUrl)}${path}`;
+}
+
+async function createMgdbTask(config: AiConfig, model: string, prompt: string, references: ReferenceImage[], options?: RequestOptions): Promise<VideoGenerationTask> {
+    const text = prompt.trim();
+    if (!text) throw new Error("MGDB 视频需要提示词，请输入视频描述");
+    try {
+        const images = await Promise.all(references.slice(0, MGDB_REFERENCE_IMAGE_LIMIT).map((image) => uploadMgdbReferenceImage(config, image, options)));
+        const payload = {
+            platform: "mgdb",
+            type: "video",
+            model: MGDB_UPSTREAM_MODEL,
+            prompt: text,
+            ratio: normalizeMgdbRatio(config.size),
+            duration: normalizeMgdbDuration(config.videoSeconds),
+            images,
+        };
+        const created = (await axios.post<MgdbTask>(mgdbApiUrl(config, "/api/v1/generate"), payload, { headers: aiHeaders(config, "application/json"), signal: options?.signal })).data;
+        if (!created?.task_id) throw new Error("MGDB 接口没有返回任务 ID");
+        return { id: created.task_id, provider: "mgdb", model };
+    } catch (error) {
+        throw new Error(readAxiosError(error, "MGDB 任务创建失败"));
+    }
+}
+
+async function pollMgdbTask(config: AiConfig, task: VideoGenerationTask, options?: RequestOptions): Promise<VideoGenerationTaskState> {
+    try {
+        const state = (await axios.get<MgdbTask>(mgdbApiUrl(config, `/api/v1/task/${encodeURIComponent(task.id)}`), { headers: aiHeaders(config), signal: options?.signal })).data;
+        if (state?.status === "completed") {
+            const url = state.result?.url;
+            if (!url) return { status: "failed", error: "MGDB 任务成功但没有返回视频 URL" };
+            return { status: "completed", result: await videoResultFromUrl(mgdbResultUrl(config, url), options) };
+        }
+        if (state?.status === "failed") return { status: "failed", error: state.error || "MGDB 视频生成失败" };
+        return { status: "pending" };
+    } catch (error) {
+        throw new Error(readAxiosError(error, "MGDB 任务查询失败"));
+    }
+}
+
+async function uploadMgdbReferenceImage(config: AiConfig, image: ReferenceImage, options?: RequestOptions) {
+    const dataUrl = await imageToDataUrl(image);
+    if (!dataUrl) throw new Error("参考图读取失败，请换一张图片或重新上传");
+    const body = new FormData();
+    body.append("file", dataUrlToFile({ ...image, dataUrl }));
+    const uploaded = (await axios.post<{ md5?: string }>(mgdbApiUrl(config, "/api/v1/file/upload"), body, { headers: aiHeaders(config), signal: options?.signal })).data;
+    if (!uploaded?.md5) throw new Error("MGDB 参考图上传失败，请稍后重试");
+    return uploaded.md5;
+}
+
+// 服务器模式下把网关返回的绝对地址改走 /api/mgdb 代理，避免浏览器跨域下载失败
+function mgdbResultUrl(config: AiConfig, url: string) {
+    const base = mgdbGatewayBaseUrl(config.baseUrl);
+    if (/^https?:\/\//i.test(base)) return url;
+    try {
+        return `${base}${new URL(url).pathname}`;
+    } catch {
+        return url;
+    }
+}
+
+function providerLabel(provider: VideoGenerationTask["provider"]) {
+    if (provider === "seedance") return "Seedance ";
+    if (provider === "mgdb") return "MGDB ";
+    return "";
 }
 
 function assertSeedanceVideoReferences(videoReferences: ReferenceVideo[]) {
@@ -274,9 +356,14 @@ function unwrapEnvelope<T>(payload: ApiEnvelope<T>, emptyMessage: string): T {
 
 function readAxiosError(error: unknown, fallback: string) {
     if (axios.isCancel(error)) return "请求已取消";
-    if (axios.isAxiosError<{ error?: { message?: string }; msg?: string; code?: number }>(error)) {
+    if (axios.isAxiosError<{ error?: { message?: string } | string; msg?: string; code?: number; retryAfterSec?: number }>(error)) {
         const responseData = error.response?.data;
-        return responseData?.msg || responseData?.error?.message || statusMessage(error.response?.status, fallback);
+        // MGDB 网关的错误是 { error: string, retryAfterSec?: number }
+        const gatewayError = typeof responseData?.error === "string" ? responseData.error : responseData?.error?.message;
+        const retryHint = typeof responseData?.retryAfterSec === "number" ? `（约 ${responseData.retryAfterSec} 秒后可重试）` : "";
+        if (responseData?.msg) return responseData.msg;
+        if (gatewayError) return `${gatewayError}${retryHint}`;
+        return statusMessage(error.response?.status, fallback);
     }
     if (error instanceof DOMException && error.name === "AbortError") return "请求已取消";
     return error instanceof Error ? error.message : fallback;

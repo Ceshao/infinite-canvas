@@ -63,6 +63,8 @@ export function isSeedanceVideoConfig(config: AiConfig | Pick<AiConfig, "model" 
 
 export function isSeedanceVideoModel(model: string) {
     const value = model.toLowerCase();
+    // mgdb 通道的模型名可能带 seedance 字样（如 mgdb-seedance-2.0），但走自有网关协议而非 Ark
+    if (value.includes("mgdb")) return false;
     return value.includes("seedance") || value.includes("doubao-seedance");
 }
 
@@ -134,11 +136,7 @@ export function seedanceReferenceLabel(kind: "image" | "video" | "audio", index:
 }
 
 export function buildSeedancePromptText(prompt: string, images: ReferenceImage[], videos: ReferenceVideo[], audios: ReferenceAudio[]) {
-    const labels = [
-        ...images.map((_, index) => seedanceReferenceLabel("image", index)),
-        ...videos.map((_, index) => seedanceReferenceLabel("video", index)),
-        ...audios.map((_, index) => seedanceReferenceLabel("audio", index)),
-    ];
+    const labels = [...images.map((_, index) => seedanceReferenceLabel("image", index)), ...videos.map((_, index) => seedanceReferenceLabel("video", index)), ...audios.map((_, index) => seedanceReferenceLabel("audio", index))];
     const text = prompt.trim();
     if (!labels.length) return text;
     return `参考素材编号：${labels.join("、")}。请按这些编号理解提示词中的图片、视频和音频引用。\n\n${text}`;

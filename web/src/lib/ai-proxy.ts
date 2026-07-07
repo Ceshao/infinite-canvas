@@ -14,6 +14,15 @@ export function readServerProxyConfig(env: Record<string, string | undefined> = 
     return { upstreamBaseUrl, apiKey };
 }
 
+const MGDB_DEFAULT_UPSTREAM_BASE_URL = "https://gw.amlig.com";
+
+export function readMgdbProxyConfig(env: Record<string, string | undefined> = process.env): ServerProxyConfig | null {
+    const upstreamBaseUrl = (env.AI_PROXY_MGDB_UPSTREAM_BASE_URL || MGDB_DEFAULT_UPSTREAM_BASE_URL).trim().replace(/\/+$/, "");
+    const apiKey = (env.AI_PROXY_MGDB_API_KEY || "").trim();
+    if (!upstreamBaseUrl || !apiKey) return null;
+    return { upstreamBaseUrl, apiKey };
+}
+
 export function parseAccessCodes(value: string | undefined): Set<string> {
     return new Set(
         (value || "")
