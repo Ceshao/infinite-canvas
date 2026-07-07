@@ -14,16 +14,15 @@ describe("parseAccessCodes", () => {
 });
 
 describe("readServerProxyConfig", () => {
-    const env = { AI_PROXY_UPSTREAM_BASE_URL: "http://new-api:3000/", AI_PROXY_API_KEY: "sk-test", AI_PROXY_ACCESS_CODES: "code-1" };
+    const env = { AI_PROXY_UPSTREAM_BASE_URL: "http://new-api:3000/", AI_PROXY_API_KEY: "sk-test" };
 
-    test("三个变量齐备时返回配置并去除尾斜杠", () => {
-        expect(readServerProxyConfig(env)).toEqual({ upstreamBaseUrl: "http://new-api:3000", apiKey: "sk-test", accessCodes: new Set(["code-1"]) });
+    test("两个变量齐备时返回配置并去除尾斜杠（ACCESS_CODES 不再必需）", () => {
+        expect(readServerProxyConfig(env)).toEqual({ upstreamBaseUrl: "http://new-api:3000", apiKey: "sk-test" });
     });
 
     test("任一变量缺失返回 null", () => {
         expect(readServerProxyConfig({ ...env, AI_PROXY_UPSTREAM_BASE_URL: "" })).toBeNull();
         expect(readServerProxyConfig({ ...env, AI_PROXY_API_KEY: undefined })).toBeNull();
-        expect(readServerProxyConfig({ ...env, AI_PROXY_ACCESS_CODES: " , " })).toBeNull();
     });
 });
 

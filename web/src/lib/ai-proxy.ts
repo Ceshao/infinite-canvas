@@ -3,15 +3,13 @@ export type AccessCodeStyle = "bearer" | "gemini";
 export type ServerProxyConfig = {
     upstreamBaseUrl: string;
     apiKey: string;
-    accessCodes: Set<string>;
 };
 
 export function readServerProxyConfig(env: Record<string, string | undefined> = process.env): ServerProxyConfig | null {
     const upstreamBaseUrl = (env.AI_PROXY_UPSTREAM_BASE_URL || "").trim().replace(/\/+$/, "");
     const apiKey = (env.AI_PROXY_API_KEY || "").trim();
-    const accessCodes = parseAccessCodes(env.AI_PROXY_ACCESS_CODES);
-    if (!upstreamBaseUrl || !apiKey || !accessCodes.size) return null;
-    return { upstreamBaseUrl, apiKey, accessCodes };
+    if (!upstreamBaseUrl || !apiKey) return null;
+    return { upstreamBaseUrl, apiKey };
 }
 
 export function parseAccessCodes(value: string | undefined): Set<string> {

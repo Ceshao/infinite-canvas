@@ -1,5 +1,6 @@
 import type { NextRequest } from "next/server";
 
+import { verifyCode } from "@/lib/access-code-store";
 import { parseModelsPayload, proxyErrorResponse, readAccessCode, readServerProxyConfig } from "@/lib/ai-proxy";
 
 export const runtime = "nodejs";
@@ -13,7 +14,7 @@ export async function GET(request: NextRequest) {
     if (!config) return Response.json({ serverMode: false });
     const access = readAccessCode(request.headers);
     if (!access) return Response.json({ serverMode: true });
-    if (!config.accessCodes.has(access.code)) return proxyErrorResponse(401, "访问码无效或已停用");
+    if (!(await verifyCode(access.code))) return proxyErrorResponse(401, "访问码无效或已停用");
     const { models, modelsError } = await loadUpstreamModels(config.upstreamBaseUrl, config.apiKey);
     return Response.json({ serverMode: true, valid: true, models, ...(modelsError ? { modelsError } : {}) });
 }

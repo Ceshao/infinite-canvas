@@ -1,5 +1,6 @@
 import type { NextRequest } from "next/server";
 
+import { recordUsage, verifyCode } from "@/lib/access-code-store";
 import { buildForwardHeaders, buildUpstreamUrl, proxyErrorResponse, readAccessCode, readServerProxyConfig } from "@/lib/ai-proxy";
 
 export const runtime = "nodejs";
@@ -19,7 +20,8 @@ async function proxyRequest(request: NextRequest, context: RouteContext) {
     const config = readServerProxyConfig();
     if (!config) return proxyErrorResponse(404, "服务端代理未启用");
     const access = readAccessCode(request.headers);
-    if (!access || !config.accessCodes.has(access.code)) return proxyErrorResponse(401, "访问码无效或已停用");
+    if (!access || !(await verifyCode(access.code))) return proxyErrorResponse(401, "访问码无效或已停用");
+    await recordUsage(access.code);
     const { path } = await context.params;
     const url = buildUpstreamUrl(config.upstreamBaseUrl, path || [], request.nextUrl.search);
     const body = request.method === "GET" || request.method === "HEAD" ? undefined : request.body;
