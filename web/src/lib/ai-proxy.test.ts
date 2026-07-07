@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 
-import { buildForwardHeaders, buildUpstreamUrl, parseAccessCodes, readAccessCode, readServerProxyConfig } from "@/lib/ai-proxy";
+import { buildForwardHeaders, buildUpstreamUrl, parseAccessCodes, parseModelsPayload, readAccessCode, readServerProxyConfig } from "@/lib/ai-proxy";
 
 describe("parseAccessCodes", () => {
     test("按逗号分隔并去除空白项", () => {
@@ -51,6 +51,18 @@ describe("buildUpstreamUrl", () => {
 
     test("对路径段做 URL 编码", () => {
         expect(buildUpstreamUrl("http://new-api:3000", ["v1", "videos", "task id/1"], "")).toBe("http://new-api:3000/v1/videos/task%20id%2F1");
+    });
+});
+
+describe("parseModelsPayload", () => {
+    test("提取 data[].id 并去重去空", () => {
+        expect(parseModelsPayload({ data: [{ id: "gpt-image-2" }, { id: "gpt-5.5" }, { id: "gpt-image-2" }, { id: "  " }, {}] })).toEqual(["gpt-image-2", "gpt-5.5"]);
+    });
+
+    test("非法负载返回空数组", () => {
+        expect(parseModelsPayload(null)).toEqual([]);
+        expect(parseModelsPayload({})).toEqual([]);
+        expect(parseModelsPayload({ data: "x" })).toEqual([]);
     });
 });
 
