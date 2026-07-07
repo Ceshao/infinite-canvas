@@ -5,6 +5,7 @@ import { useEffect, useRef } from "react";
 import { App } from "antd";
 
 import { createModelChannel, useConfigStore } from "@/stores/use-config-store";
+import { useServerModeStore } from "@/stores/use-server-mode-store";
 
 export function ClientRootInit({ children }: { children: ReactNode }) {
     const { message } = App.useApp();
@@ -12,9 +13,16 @@ export function ClientRootInit({ children }: { children: ReactNode }) {
     const updateConfig = useConfigStore((state) => state.updateConfig);
     const config = useConfigStore((state) => state.config);
     const openConfigDialog = useConfigStore((state) => state.openConfigDialog);
+    const serverModeStatus = useServerModeStore((state) => state.status);
+    const initServerMode = useServerModeStore((state) => state.initServerMode);
+
+    useEffect(() => {
+        void initServerMode();
+    }, [initServerMode]);
 
     useEffect(() => {
         if (handledConfigParams.current) return;
+        if (serverModeStatus === "unknown") return;
         const searchParams = new URLSearchParams(window.location.search);
         const baseUrl = searchParams.get("baseUrl") || searchParams.get("baseurl");
         const apiKey = searchParams.get("apiKey") || searchParams.get("apikey");
@@ -25,6 +33,7 @@ export function ClientRootInit({ children }: { children: ReactNode }) {
         searchParams.delete("apiKey");
         searchParams.delete("apikey");
         window.history.replaceState(null, "", `${window.location.pathname}${searchParams.size ? `?${searchParams}` : ""}${window.location.hash}`);
+        if (serverModeStatus === "on") return;
         const firstChannel = config.channels[0];
         updateConfig(
             "channels",
@@ -44,7 +53,7 @@ export function ClientRootInit({ children }: { children: ReactNode }) {
         if (apiKey) updateConfig("apiKey", apiKey);
         openConfigDialog(false);
         message.success("已导入本地直连配置");
-    }, [config.channels, message, openConfigDialog, updateConfig]);
+    }, [config.channels, message, openConfigDialog, updateConfig, serverModeStatus]);
 
     return <>{children}</>;
 }
