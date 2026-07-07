@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 
-import { isMgdbVideoModel, mgdbGatewayBaseUrl, mgdbPixelLabel, normalizeMgdbDuration, normalizeMgdbRatio } from "@/lib/mgdb-video";
+import { isMgdbVideoModel, mgdbGatewayBaseUrl, mgdbPixelLabel, mgdbVideoFileUrl, normalizeMgdbDuration, normalizeMgdbRatio } from "@/lib/mgdb-video";
 import { isSeedanceVideoModel } from "@/lib/seedance-video";
 
 describe("isMgdbVideoModel", () => {
@@ -77,5 +77,21 @@ describe("mgdbGatewayBaseUrl", () => {
         expect(mgdbGatewayBaseUrl("https://gw.amlig.com")).toBe("https://gw.amlig.com");
         expect(mgdbGatewayBaseUrl("https://gw.amlig.com/")).toBe("https://gw.amlig.com");
         expect(mgdbGatewayBaseUrl("https://gw.amlig.com/v1")).toBe("https://gw.amlig.com");
+    });
+});
+
+describe("mgdbVideoFileUrl", () => {
+    test("网关实测返回的相对路径：服务器模式拼到 /api/mgdb 代理", () => {
+        expect(mgdbVideoFileUrl("/api/ai", "/files/gw_07b1422127434b4b/final.mp4")).toBe("/api/mgdb/files/gw_07b1422127434b4b/final.mp4");
+        expect(mgdbVideoFileUrl("/api/ai", "files/gw_x/final.mp4")).toBe("/api/mgdb/files/gw_x/final.mp4");
+    });
+
+    test("相对路径 + 直连网关：拼成网关绝对地址", () => {
+        expect(mgdbVideoFileUrl("https://gw.amlig.com", "/files/gw_x/final.mp4")).toBe("https://gw.amlig.com/files/gw_x/final.mp4");
+    });
+
+    test("绝对地址：服务器模式改走代理，直连模式原样返回", () => {
+        expect(mgdbVideoFileUrl("/api/ai", "https://gw.amlig.com/files/gw_x/final.mp4")).toBe("/api/mgdb/files/gw_x/final.mp4");
+        expect(mgdbVideoFileUrl("https://gw.amlig.com", "https://gw.amlig.com/files/gw_x/final.mp4")).toBe("https://gw.amlig.com/files/gw_x/final.mp4");
     });
 });

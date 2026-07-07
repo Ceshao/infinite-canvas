@@ -3,7 +3,7 @@ import axios from "axios";
 import { dataUrlToFile } from "@/lib/image-utils";
 import { getMediaBlob, uploadMediaFile, type UploadedFile } from "@/services/file-storage";
 import { imageToDataUrl } from "@/services/image-storage";
-import { isMgdbVideoConfig, mgdbGatewayBaseUrl, normalizeMgdbDuration, normalizeMgdbRatio, MGDB_REFERENCE_IMAGE_LIMIT, MGDB_UPSTREAM_MODEL } from "@/lib/mgdb-video";
+import { isMgdbVideoConfig, mgdbGatewayBaseUrl, mgdbVideoFileUrl, normalizeMgdbDuration, normalizeMgdbRatio, MGDB_REFERENCE_IMAGE_LIMIT, MGDB_UPSTREAM_MODEL } from "@/lib/mgdb-video";
 import { boolConfig, buildSeedancePromptText, isSeedanceVideoConfig, normalizeSeedanceDuration, normalizeSeedanceRatio, normalizeSeedanceResolution, seedanceVideoReferenceError, SEEDANCE_REFERENCE_LIMITS } from "@/lib/seedance-video";
 import { buildApiUrl, modelOptionName, resolveModelRequestConfig, type AiConfig } from "@/stores/use-config-store";
 import type { ReferenceImage } from "@/types/image";
@@ -195,7 +195,7 @@ async function pollMgdbTask(config: AiConfig, task: VideoGenerationTask, options
         if (state?.status === "completed") {
             const url = state.result?.url;
             if (!url) return { status: "failed", error: "MGDB 任务成功但没有返回视频 URL" };
-            return { status: "completed", result: await videoResultFromUrl(mgdbResultUrl(config, url), options) };
+            return { status: "completed", result: await videoResultFromUrl(mgdbVideoFileUrl(config.baseUrl, url), options) };
         }
         if (state?.status === "failed") return { status: "failed", error: state.error || "MGDB 视频生成失败" };
         return { status: "pending" };
@@ -212,17 +212,6 @@ async function uploadMgdbReferenceImage(config: AiConfig, image: ReferenceImage,
     const uploaded = (await axios.post<{ md5?: string }>(mgdbApiUrl(config, "/api/v1/file/upload"), body, { headers: aiHeaders(config), signal: options?.signal })).data;
     if (!uploaded?.md5) throw new Error("MGDB 参考图上传失败，请稍后重试");
     return uploaded.md5;
-}
-
-// 服务器模式下把网关返回的绝对地址改走 /api/mgdb 代理，避免浏览器跨域下载失败
-function mgdbResultUrl(config: AiConfig, url: string) {
-    const base = mgdbGatewayBaseUrl(config.baseUrl);
-    if (/^https?:\/\//i.test(base)) return url;
-    try {
-        return `${base}${new URL(url).pathname}`;
-    } catch {
-        return url;
-    }
 }
 
 function providerLabel(provider: VideoGenerationTask["provider"]) {

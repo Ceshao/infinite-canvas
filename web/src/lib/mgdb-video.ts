@@ -54,3 +54,16 @@ export function mgdbGatewayBaseUrl(baseUrl: string) {
     if (/\/api\/ai$/i.test(normalized) || normalized === "") return `${normalized.replace(/\/api\/ai$/i, "")}/api/mgdb`;
     return normalized.replace(/\/v1$/i, "");
 }
+
+// 任务详情的 result.url 实测返回相对路径（/files/...），与网关文档"完整地址"的
+// 说法不符；绝对地址在服务器模式下也要改走 /api/mgdb 代理避免跨域
+export function mgdbVideoFileUrl(baseUrl: string, url: string) {
+    const base = mgdbGatewayBaseUrl(baseUrl);
+    if (!/^https?:\/\//i.test(url)) return `${base}${url.startsWith("/") ? "" : "/"}${url}`;
+    if (/^https?:\/\//i.test(base)) return url;
+    try {
+        return `${base}${new URL(url).pathname}`;
+    } catch {
+        return url;
+    }
+}
