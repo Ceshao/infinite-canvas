@@ -71,10 +71,12 @@ docker run --rm -p 3000:3000 infinite-canvas
 | --- | --- |
 | `AI_PROXY_UPSTREAM_BASE_URL` | 上游（如 New API）内网地址，例如 `http://new-api:3000` |
 | `AI_PROXY_API_KEY` | 上游真密钥，仅存在于服务器，不会下发到浏览器 |
-| `AI_PROXY_ACCESS_CODES` | 逗号分隔的访问码列表，访客输入其一即可使用；删除某个码并重启即作废 |
+| `AI_PROXY_ACCESS_CODES` | 首次启动时导入的种子访问码（逗号分隔）；之后请通过 `/admin` 网页后台管理 |
+| `AI_PROXY_ADMIN_PASSWORD` | 可选。设置后站长可访问 `/admin` 网页后台管理访问码（生成/作废/查看用量），改动即时生效 |
 
 开启后：访客首次打开站点会弹出"输入访问码"，验证通过即可使用全部生成能力；
 模型列表自动从上游 `/v1/models` 拉取（5 分钟缓存）。
+访问码数据保存在容器 `/data/access-codes.json`（请挂载卷持久化，见 `docker-compose.yml` 注释）。
 反向代理配置参考 `docs/deploy/nginx-infinite-canvas.conf.example`（注意关闭 `proxy_buffering` 以支持流式输出）。
 
 ## New API 自动配置

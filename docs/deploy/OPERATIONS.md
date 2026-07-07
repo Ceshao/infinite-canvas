@@ -68,13 +68,14 @@ docker compose -f docker-compose.server.yml pull
 docker compose -f docker-compose.server.yml up -d
 ```
 
-### 增删访问码
+### 增删访问码（推荐：网页后台）
 
-```bash
-# 编辑 /opt/infinite-canvas/.env 中的 AI_PROXY_ACCESS_CODES（逗号分隔），然后：
-cd /opt/infinite-canvas && docker compose -f docker-compose.server.yml up -d
-# 删掉的码立即失效，对应访客会重新弹出输码窗
-```
+打开 https://cancanvas.shaolabs.xyz/admin，输入管理口令（存于服务器 `.env` 的 `AI_PROXY_ADMIN_PASSWORD`）。
+生成/作废**即时生效，无需重启**；后台可查看每个码的备注、创建时间、请求数和最后使用时间。
+数据存于 docker 卷 `canvas-data`（容器内 `/data/access-codes.json`）。
+
+备用手段（后台不可用时）：进入卷编辑或删除 `access-codes.json`；删除该文件并重启容器会重新从 `.env` 的
+`AI_PROXY_ACCESS_CODES` 种子导入。`.env` 里的码仅在数据文件不存在时才会导入。
 
 ### 轮换 New API 密钥
 

@@ -10,10 +10,16 @@ services:
     # environment:
     #   AI_PROXY_UPSTREAM_BASE_URL: http://new-api:3000   # New API 内网地址
     #   AI_PROXY_API_KEY: sk-xxxx                          # New API 真密钥（不会下发到浏览器）
-    #   AI_PROXY_ACCESS_CODES: alice-x7k2,bob-m9q4         # 逗号分隔的访问码，可随时增删后重启生效
+    #   AI_PROXY_ACCESS_CODES: alice-x7k2,bob-m9q4         # 首次启动时导入的种子访问码（之后用 /admin 管理）
+    #   AI_PROXY_ADMIN_PASSWORD: your-admin-password       # 设置后可用 /admin 网页管理访问码
+    # volumes:
+    #   - canvas-data:/data                                # 访问码与用量数据持久化
     # 若 New API 在同一 docker 网络，取消注释接入（网络名按实际填写）：
     # networks:
     #   - new-api-network
+
+# volumes:
+#   canvas-data:
 
 # networks:
 #   new-api-network:
