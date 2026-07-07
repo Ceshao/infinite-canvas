@@ -86,7 +86,7 @@
 
 | 文件 | 改动 |
 |---|---|
-| `app-config-modal.tsx` | 组件顶部分支：服务端模式 → 渲染 `AccessCodeModal` 代替原配置 UI（所有 `openConfigDialog` 调用点无需改动） |
+| `app-top-nav.tsx` | 渲染处分支：服务端模式 → 渲染 `AccessCodeModal` 代替 `AppConfigModal`（hooks 安全；所有 `openConfigDialog` 调用点无需改动） |
 | `client-root-init.tsx` | 服务端模式下忽略 `?baseurl=&apikey=` URL 导入；挂载时触发 `initServerMode()` |
 | `docker-compose.yml` | 增加 `environment:` 三个变量的注释示例 |
 | `README.md` | 增加服务端模式部署说明 |
