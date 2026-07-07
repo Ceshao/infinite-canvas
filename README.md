@@ -63,6 +63,20 @@ docker run --rm -p 3000:3000 infinite-canvas
 
 首次打开后进入右上角配置，填入自己的 OpenAI 兼容 `Base URL` 和 `API Key`。
 
+### 服务端代理模式（访客免配置）
+
+为容器设置以下三个环境变量即可开启；任一缺失则行为与原版一致：
+
+| 变量 | 说明 |
+| --- | --- |
+| `AI_PROXY_UPSTREAM_BASE_URL` | 上游（如 New API）内网地址，例如 `http://new-api:3000` |
+| `AI_PROXY_API_KEY` | 上游真密钥，仅存在于服务器，不会下发到浏览器 |
+| `AI_PROXY_ACCESS_CODES` | 逗号分隔的访问码列表，访客输入其一即可使用；删除某个码并重启即作废 |
+
+开启后：访客首次打开站点会弹出"输入访问码"，验证通过即可使用全部生成能力；
+模型列表自动从上游 `/v1/models` 拉取（5 分钟缓存）。
+反向代理配置参考 `docs/deploy/nginx-infinite-canvas.conf.example`（注意关闭 `proxy_buffering` 以支持流式输出）。
+
 ## New API 自动配置
 
 如果使用 New API，可在 `系统设置 -> 聊天方式 -> 添加聊天设置` 中填入：
