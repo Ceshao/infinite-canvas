@@ -1,3 +1,5 @@
+import { createHash, timingSafeEqual } from "node:crypto";
+
 export type AccessCodeStyle = "bearer" | "gemini";
 
 export type ServerProxyConfig = {
@@ -55,4 +57,11 @@ export function parseModelsPayload(payload: unknown): string[] {
 
 export function proxyErrorResponse(status: number, message: string) {
     return Response.json({ error: { message } }, { status });
+}
+
+export function safeEqualSecret(expected: string, provided: string) {
+    if (!expected.trim() || !provided.trim()) return false;
+    const expectedHash = createHash("sha256").update(expected).digest();
+    const providedHash = createHash("sha256").update(provided).digest();
+    return timingSafeEqual(expectedHash, providedHash);
 }

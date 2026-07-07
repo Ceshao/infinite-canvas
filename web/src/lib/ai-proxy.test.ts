@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 
-import { buildForwardHeaders, buildUpstreamUrl, parseAccessCodes, parseModelsPayload, readAccessCode, readServerProxyConfig } from "@/lib/ai-proxy";
+import { buildForwardHeaders, buildUpstreamUrl, parseAccessCodes, parseModelsPayload, readAccessCode, readServerProxyConfig, safeEqualSecret } from "@/lib/ai-proxy";
 
 describe("parseAccessCodes", () => {
     test("按逗号分隔并去除空白项", () => {
@@ -79,5 +79,14 @@ describe("buildForwardHeaders", () => {
         const headers = buildForwardHeaders(new Headers(), "sk-real", "gemini");
         expect(headers.get("x-goog-api-key")).toBe("sk-real");
         expect(headers.get("authorization")).toBeNull();
+    });
+});
+
+describe("safeEqualSecret", () => {
+    test("相同返回 true，不同/为空返回 false", () => {
+        expect(safeEqualSecret("admin-pw", "admin-pw")).toBe(true);
+        expect(safeEqualSecret("admin-pw", "wrong")).toBe(false);
+        expect(safeEqualSecret("", "")).toBe(false);
+        expect(safeEqualSecret("a", "")).toBe(false);
     });
 });
