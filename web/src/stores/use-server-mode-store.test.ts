@@ -48,4 +48,14 @@ describe("buildServerConfigUpdates", () => {
         expect(updates.imageModel).toBe("");
         expect(updates.models).toEqual([]);
     });
+
+    test("服务端下发的异步图像模型清单原样进入配置", () => {
+        const updates = buildServerConfigUpdates(defaultConfig, "test-code", models, ["nano-pro", "gpt-img2"]);
+        expect(updates.asyncImageModels).toEqual(["nano-pro", "gpt-img2"]);
+    });
+
+    test("未下发异步图像模型时为空数组（保持原同步行为）", () => {
+        const updates = buildServerConfigUpdates(defaultConfig, "test-code", models);
+        expect(updates.asyncImageModels).toEqual([]);
+    });
 });

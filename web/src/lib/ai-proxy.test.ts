@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 
-import { buildForwardHeaders, buildUpstreamUrl, parseAccessCodes, parseModelsPayload, readAccessCode, readMgdbProxyConfig, readServerProxyConfig, safeEqualSecret } from "@/lib/ai-proxy";
+import { buildForwardHeaders, buildUpstreamUrl, parseAccessCodes, parseAsyncImageModels, parseModelsPayload, readAccessCode, readMgdbProxyConfig, readServerProxyConfig, safeEqualSecret } from "@/lib/ai-proxy";
 
 describe("parseAccessCodes", () => {
     test("按逗号分隔并去除空白项", () => {
@@ -10,6 +10,17 @@ describe("parseAccessCodes", () => {
     test("空值返回空集合", () => {
         expect(parseAccessCodes(undefined)).toEqual(new Set());
         expect(parseAccessCodes("")).toEqual(new Set());
+    });
+});
+
+describe("parseAsyncImageModels", () => {
+    test("按逗号分隔、去空白、保持顺序去重", () => {
+        expect(parseAsyncImageModels({ AI_PROXY_ASYNC_IMAGE_MODELS: " nano-pro, nano-2,,gpt-img2, nano-pro " })).toEqual(["nano-pro", "nano-2", "gpt-img2"]);
+    });
+
+    test("未配置或为空时返回空数组（功能关闭，行为与原版一致）", () => {
+        expect(parseAsyncImageModels({})).toEqual([]);
+        expect(parseAsyncImageModels({ AI_PROXY_ASYNC_IMAGE_MODELS: "  " })).toEqual([]);
     });
 });
 

@@ -23,6 +23,19 @@ export function readMgdbProxyConfig(env: Record<string, string | undefined> = pr
     return { upstreamBaseUrl, apiKey };
 }
 
+// 服务端声明哪些图像模型走异步任务链路（new-api Sora 任务中继 → image shim），
+// 未配置时前端保持原同步 /images/* 行为。
+export function parseAsyncImageModels(env: Record<string, string | undefined> = process.env): string[] {
+    return Array.from(
+        new Set(
+            (env.AI_PROXY_ASYNC_IMAGE_MODELS || "")
+                .split(",")
+                .map((model) => model.trim())
+                .filter(Boolean),
+        ),
+    );
+}
+
 export function parseAccessCodes(value: string | undefined): Set<string> {
     return new Set(
         (value || "")

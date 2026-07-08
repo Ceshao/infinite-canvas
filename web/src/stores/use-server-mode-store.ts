@@ -8,7 +8,7 @@ export const SERVER_CHANNEL_ID = "server";
 
 export type ServerModeStatus = "unknown" | "off" | "on";
 
-type ServerConfigResponse = { serverMode?: boolean; valid?: boolean; models?: string[]; modelsError?: string; error?: { message?: string } };
+type ServerConfigResponse = { serverMode?: boolean; valid?: boolean; models?: string[]; asyncImageModels?: string[]; modelsError?: string; error?: { message?: string } };
 
 type ServerModeStore = {
     status: ServerModeStatus;
@@ -45,7 +45,7 @@ export const useServerModeStore = create<ServerModeStore>()((set, get) => ({
             const response = await fetch("/api/ai-config", { headers: { authorization: `Bearer ${trimmed}` }, cache: "no-store" });
             const payload = (await response.json()) as ServerConfigResponse;
             if (!response.ok || !payload.valid) return { ok: false, message: payload.error?.message || "访问码无效或已停用" };
-            applyServerConfig(trimmed, payload.models || []);
+            applyServerConfig(trimmed, payload.models || [], payload.asyncImageModels || []);
             return { ok: true, message: payload.modelsError };
         } catch {
             return { ok: false, message: "网络错误，请稍后重试" };
@@ -58,13 +58,13 @@ function storedAccessCode() {
     return channel?.apiKey?.trim() || "";
 }
 
-export function applyServerConfig(code: string, models: string[]) {
+export function applyServerConfig(code: string, models: string[], asyncImageModels: string[] = []) {
     const { config, updateConfig } = useConfigStore.getState();
-    const updates = buildServerConfigUpdates(config, code, models);
+    const updates = buildServerConfigUpdates(config, code, models, asyncImageModels);
     for (const [key, value] of Object.entries(updates)) updateConfig(key as keyof AiConfig, value as never);
 }
 
-export function buildServerConfigUpdates(config: AiConfig, code: string, models: string[]): Partial<AiConfig> {
+export function buildServerConfigUpdates(config: AiConfig, code: string, models: string[], asyncImageModels: string[] = []): Partial<AiConfig> {
     const channel: ModelChannel = { id: SERVER_CHANNEL_ID, name: "服务器渠道", baseUrl: "/api/ai", apiKey: code, apiFormat: "openai", models };
     const encoded = models.map((model) => encodeChannelModel(SERVER_CHANNEL_ID, model));
     const imageModels = filterModelsByCapability(encoded, "image");
@@ -86,5 +86,6 @@ export function buildServerConfigUpdates(config: AiConfig, code: string, models:
         model: pick(config.model, imageModels.length ? imageModels : encoded),
         baseUrl: "/api/ai",
         apiKey: code,
+        asyncImageModels,
     };
 }

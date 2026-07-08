@@ -45,6 +45,8 @@ export type AiConfig = {
     size: string;
     count: string;
     canvasImageCount: string;
+    // 服务端模式下发：这些图像模型走异步任务链路（提交/轮询/取件），其余仍走同步 /images/*
+    asyncImageModels: string[];
 };
 
 export type WebdavSyncConfig = {
@@ -100,6 +102,7 @@ export const defaultConfig: AiConfig = {
     size: "1:1",
     count: "1",
     canvasImageCount: "3",
+    asyncImageModels: [],
 };
 
 export const defaultWebdavSyncConfig: WebdavSyncConfig = {

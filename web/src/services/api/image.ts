@@ -4,6 +4,7 @@ import { buildApiUrl, resolveModelRequestConfig, type AiConfig, type ModelChanne
 import { nanoid } from "nanoid";
 import { dataUrlToFile } from "@/lib/image-utils";
 import { buildImageReferencePromptText } from "@/lib/image-reference-prompt";
+import { isServerProxiedBaseUrl } from "@/lib/server-proxy";
 import { imageToDataUrl } from "@/services/image-storage";
 import type { ReferenceImage } from "@/types/image";
 
@@ -221,6 +222,82 @@ function readStatusError(status: number | undefined, fallback: string) {
     if (status === 401 || status === 403) return "鉴权失败，请检查 API Key、套餐权限或模型权限";
     if (status === 429) return "请求被限流或额度不足，请稍后重试";
     return status ? `${fallback}：${status}` : fallback;
+}
+
+// ---------------------------------------------------------------------------
+// 异步图像任务链路（服务端模式，模型在 asyncImageModels 清单内时启用）：
+// 经 new-api 的 Sora 任务中继（/v1/videos 提交 → 轮询 → /content 取件）到达
+// image-gateway-shim，再由 shim 调 gw2 网关的异步任务接口。路径名叫 videos
+// 是因为这是 new-api 对 OpenAI 类型渠道唯一的异步任务外壳，这里承载的是图像。
+// ---------------------------------------------------------------------------
+type AsyncImageTask = { id?: string; task_id?: string; status?: string; error?: { message?: string } };
+
+function isAsyncImageModel(requestConfig: AiConfig) {
+    return isServerProxiedBaseUrl(requestConfig.baseUrl) && (requestConfig.asyncImageModels || []).includes(requestConfig.model);
+}
+
+async function requestAsyncImages(config: AiConfig, prompt: string, references: ReferenceImage[], n: number, quality: string | undefined, requestSize: string | null, options?: RequestOptions) {
+    const files = await Promise.all(references.map(async (image) => dataUrlToFile({ ...image, dataUrl: await imageToDataUrl(image) })));
+    const submitOne = async () => {
+        let created: AsyncImageTask;
+        if (files.length) {
+            const formData = new FormData();
+            formData.set("model", config.model);
+            formData.set("prompt", prompt);
+            if (quality) formData.set("quality", quality);
+            if (requestSize) formData.set("size", requestSize);
+            files.forEach((file) => formData.append("image", file));
+            created = (await axios.post<AsyncImageTask>(aiApiUrl(config, "/videos"), formData, { headers: aiHeaders(config), signal: options?.signal })).data;
+        } else {
+            const body = { model: config.model, prompt, ...(quality ? { quality } : {}), ...(requestSize ? { size: requestSize } : {}) };
+            created = (await axios.post<AsyncImageTask>(aiApiUrl(config, "/videos"), body, { headers: aiHeaders(config, "application/json"), signal: options?.signal })).data;
+        }
+        const taskId = created.task_id || created.id;
+        if (!taskId) throw new Error("异步图像接口没有返回任务 ID");
+        return pollAsyncImage(config, taskId, options);
+    };
+    return Promise.all(Array.from({ length: n }, submitOne));
+}
+
+async function pollAsyncImage(config: AiConfig, taskId: string, options?: RequestOptions) {
+    for (let attempt = 0; attempt < 120; attempt += 1) {
+        if (options?.signal?.aborted) throw new DOMException("Aborted", "AbortError");
+        const state = (await axios.get<AsyncImageTask>(aiApiUrl(config, `/videos/${encodeURIComponent(taskId)}`), { headers: aiHeaders(config), signal: options?.signal })).data;
+        if (state.status === "completed") {
+            const content = await axios.get<Blob>(aiApiUrl(config, `/videos/${encodeURIComponent(taskId)}/content`), { headers: aiHeaders(config), responseType: "blob", signal: options?.signal });
+            return { id: nanoid(), dataUrl: await imageBlobToDataUrl(content.data) };
+        }
+        if (state.status === "failed" || state.status === "cancelled") throw new Error(state.error?.message || "图像生成失败");
+        await asyncImageDelay(2500, options?.signal);
+    }
+    throw new Error("图像生成超时，请稍后重试");
+}
+
+function imageBlobToDataUrl(blob: Blob) {
+    return new Promise<string>((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(String(reader.result || ""));
+        reader.onerror = () => reject(new Error("读取生成结果失败"));
+        reader.readAsDataURL(blob);
+    });
+}
+
+function asyncImageDelay(ms: number, signal?: AbortSignal) {
+    return new Promise<void>((resolve, reject) => {
+        if (signal?.aborted) {
+            reject(new DOMException("Aborted", "AbortError"));
+            return;
+        }
+        const timer = setTimeout(resolve, ms);
+        signal?.addEventListener(
+            "abort",
+            () => {
+                clearTimeout(timer);
+                reject(new DOMException("Aborted", "AbortError"));
+            },
+            { once: true },
+        );
+    });
 }
 
 function withSystemPrompt(config: AiConfig, prompt: string) {
@@ -619,6 +696,13 @@ export async function requestGeneration(config: AiConfig, prompt: string, option
     }
     const quality = normalizeQuality(config.quality);
     const requestSize = resolveRequestSize(quality, config.size);
+    if (isAsyncImageModel(requestConfig)) {
+        try {
+            return await requestAsyncImages(requestConfig, withSystemPrompt(requestConfig, prompt), [], n, quality, requestSize ?? null, options);
+        } catch (error) {
+            throw new Error(readAxiosError(error, "请求失败"));
+        }
+    }
     try {
         const response = await axios.post<ImageApiResponse>(
             aiApiUrl(requestConfig, "/images/generations"),
@@ -657,6 +741,13 @@ export async function requestEdit(config: AiConfig, prompt: string, references: 
     }
     const quality = normalizeQuality(config.quality);
     const requestSize = resolveRequestSize(quality, config.size);
+    if (isAsyncImageModel(requestConfig)) {
+        try {
+            return await requestAsyncImages(requestConfig, withSystemPrompt(requestConfig, requestPrompt), references, n, quality, requestSize ?? null, options);
+        } catch (error) {
+            throw new Error(readAxiosError(error, "请求失败"));
+        }
+    }
     const formData = new FormData();
     formData.set("model", requestConfig.model);
     formData.set("prompt", withSystemPrompt(requestConfig, requestPrompt));
