@@ -1,6 +1,6 @@
 # 图像生成异步化：经 new-api 任务中继（消除假同步）
 
-日期：2026-07-08 ｜ 状态：实施中 ｜ 前置：`2026-07-08-mgdb-via-newapi.md`（视频链路，已验收）
+日期：2026-07-08 ｜ 状态：✅ 已完成并验收 ｜ 前置：`2026-07-08-mgdb-via-newapi.md`（视频链路，已验收）
 
 ## 问题
 
@@ -57,3 +57,20 @@
 cancanvas /image 用清单内模型生成：浏览器调 /api/ai/v1/videos*（不再长挂
 /images/generations）；new-api 出现任务计费日志；图像可显示；断开重连后任务在
 new-api 任务表中可查（结果不因客户端断连而丢失）。
+
+## 验收结果（2026-07-08）
+
+- curl 全链路：提交→轮询→取件，下载 1MB 真实 PNG（gw2 生成），new-api 计费日志
+  `channel_id:2, model:nano-2, request_path:/v1/videos, model_price:0.02, is_task:true` ✅
+- 浏览器真实 UI（Playwright）：/image 选 nano-2 生成，只出现
+  POST /api/ai/v1/videos → GET .../videos/{id} → GET .../content，零同步长挂；
+  赛博朋克城市图 1024×1024 正常显示 ✅
+
+## 踩坑记录
+
+- **能力分类器误判**（已修，commit beaadb1）：nano-2/nano-pro/gpt-img2 名字不含
+  image/dall-e/flux 等关键词，`isImageModelName` 把它们判成文本模型，导致图像模型
+  选择器里根本选不中。修法：`buildServerConfigUpdates` 里把 asyncImageModels 强制
+  归入图像类并从文本/视频/音频类排除。
+- 命名代价：异步图像走的是 new-api 的 /v1/videos 任务外壳（承载图像不是视频），
+  这是 type=1 渠道唯一能中继的异步任务形状，代码注释已说明，勿误改。
