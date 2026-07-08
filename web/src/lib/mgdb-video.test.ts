@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 
-import { isMgdbVideoModel, mgdbGatewayBaseUrl, mgdbPixelLabel, mgdbVideoFileUrl, normalizeMgdbDuration, normalizeMgdbRatio } from "@/lib/mgdb-video";
+import { isMgdbServerProxied, isMgdbVideoModel, mgdbGatewayBaseUrl, mgdbPixelLabel, mgdbVideoFileUrl, normalizeMgdbDuration, normalizeMgdbRatio } from "@/lib/mgdb-video";
 import { isSeedanceVideoModel } from "@/lib/seedance-video";
 
 describe("isMgdbVideoModel", () => {
@@ -63,6 +63,20 @@ describe("mgdbPixelLabel", () => {
         expect(mgdbPixelLabel("16:9")).toBe("1280x720");
         expect(mgdbPixelLabel("1:1")).toBe("960x960");
         expect(mgdbPixelLabel("adaptive")).toBe("1280x720");
+    });
+});
+
+describe("isMgdbServerProxied", () => {
+    test("服务端代理模式（baseUrl 为 /api/ai）走 new-api 异步转发", () => {
+        expect(isMgdbServerProxied("/api/ai")).toBe(true);
+        expect(isMgdbServerProxied("/api/ai/")).toBe(true);
+        expect(isMgdbServerProxied("https://cancanvas.shaolabs.xyz/api/ai")).toBe(true);
+    });
+
+    test("直连网关地址保持私有协议路径", () => {
+        expect(isMgdbServerProxied("https://gw.amlig.com")).toBe(false);
+        expect(isMgdbServerProxied("https://gw.amlig.com/v1")).toBe(false);
+        expect(isMgdbServerProxied("")).toBe(false);
     });
 });
 

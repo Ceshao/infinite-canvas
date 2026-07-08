@@ -47,11 +47,19 @@ export function mgdbPixelLabel(ratio: string) {
     return mgdbPixels[normalizeMgdbRatio(ratio)] || "";
 }
 
+// 服务端代理模式（baseUrl 为 /api/ai）下，MGDB 视频生成改走 new-api 的
+// Sora 兼容异步任务接口（/v1/videos 提交/轮询/取件），由 new-api 统一计量计费；
+// 只有直连网关的自部署用户仍走 /api/v1/generate 私有协议。
+export function isMgdbServerProxied(baseUrl: string) {
+    const normalized = (baseUrl || "").trim().replace(/\/+$/, "");
+    return /\/api\/ai$/i.test(normalized);
+}
+
 // 服务器模式下渠道 baseUrl 固定为 /api/ai（转发到 new-api），MGDB 网关协议
 // 与 new-api 不兼容，需改走专用代理 /api/mgdb；直连网关时去掉误填的 /v1 后缀。
 export function mgdbGatewayBaseUrl(baseUrl: string) {
     const normalized = (baseUrl || "").trim().replace(/\/+$/, "");
-    if (/\/api\/ai$/i.test(normalized) || normalized === "") return `${normalized.replace(/\/api\/ai$/i, "")}/api/mgdb`;
+    if (isMgdbServerProxied(normalized) || normalized === "") return `${normalized.replace(/\/api\/ai$/i, "")}/api/mgdb`;
     return normalized.replace(/\/v1$/i, "");
 }
 

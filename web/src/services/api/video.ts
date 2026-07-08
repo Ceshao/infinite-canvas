@@ -3,7 +3,7 @@ import axios from "axios";
 import { dataUrlToFile } from "@/lib/image-utils";
 import { getMediaBlob, uploadMediaFile, type UploadedFile } from "@/services/file-storage";
 import { imageToDataUrl } from "@/services/image-storage";
-import { isMgdbVideoConfig, mgdbGatewayBaseUrl, mgdbVideoFileUrl, normalizeMgdbDuration, normalizeMgdbRatio, MGDB_REFERENCE_IMAGE_LIMIT, MGDB_UPSTREAM_MODEL } from "@/lib/mgdb-video";
+import { isMgdbServerProxied, isMgdbVideoConfig, mgdbGatewayBaseUrl, mgdbVideoFileUrl, normalizeMgdbDuration, normalizeMgdbRatio, MGDB_REFERENCE_IMAGE_LIMIT, MGDB_UPSTREAM_MODEL } from "@/lib/mgdb-video";
 import { boolConfig, buildSeedancePromptText, isSeedanceVideoConfig, normalizeSeedanceDuration, normalizeSeedanceRatio, normalizeSeedanceResolution, seedanceVideoReferenceError, SEEDANCE_REFERENCE_LIMITS } from "@/lib/seedance-video";
 import { buildApiUrl, modelOptionName, resolveModelRequestConfig, type AiConfig } from "@/stores/use-config-store";
 import type { ReferenceImage } from "@/types/image";
@@ -63,7 +63,11 @@ export async function createVideoGenerationTask(config: AiConfig, prompt: string
         if (videoReferences.length || audioReferences.length) {
             throw new Error("MGDB 视频通道仅支持参考图，请移除参考视频/音频，或切换到 Seedance 2.0 / 火山 Agent Plan 模型");
         }
-        return createMgdbTask(requestConfig, selectedModel, prompt, references, options);
+        // 服务端代理模式：经 new-api 的 Sora 兼容异步任务接口转发（统一计量计费），
+        // 与 OpenAI 视频分支协议一致，直接复用；直连网关用户仍走私有协议。
+        if (!isMgdbServerProxied(requestConfig.baseUrl)) {
+            return createMgdbTask(requestConfig, selectedModel, prompt, references, options);
+        }
     }
     if (isSeedanceVideoConfig(requestConfig)) {
         return createSeedanceTask(requestConfig, selectedModel, prompt, references, videoReferences, audioReferences, options);
@@ -345,13 +349,15 @@ function unwrapEnvelope<T>(payload: ApiEnvelope<T>, emptyMessage: string): T {
 
 function readAxiosError(error: unknown, fallback: string) {
     if (axios.isCancel(error)) return "请求已取消";
-    if (axios.isAxiosError<{ error?: { message?: string } | string; msg?: string; code?: number; retryAfterSec?: number }>(error)) {
+    if (axios.isAxiosError<{ error?: { message?: string } | string; msg?: string; message?: string; code?: number | string; retryAfterSec?: number }>(error)) {
         const responseData = error.response?.data;
         // MGDB 网关的错误是 { error: string, retryAfterSec?: number }
         const gatewayError = typeof responseData?.error === "string" ? responseData.error : responseData?.error?.message;
         const retryHint = typeof responseData?.retryAfterSec === "number" ? `（约 ${responseData.retryAfterSec} 秒后可重试）` : "";
         if (responseData?.msg) return responseData.msg;
         if (gatewayError) return `${gatewayError}${retryHint}`;
+        // new-api 任务接口的错误是 { code: string, message: string, data: null }
+        if (typeof responseData?.message === "string" && responseData.message) return responseData.message;
         return statusMessage(error.response?.status, fallback);
     }
     if (error instanceof DOMException && error.name === "AbortError") return "请求已取消";
