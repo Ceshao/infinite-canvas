@@ -141,7 +141,7 @@
 
 @layer utilities {
     .ai-title-aurora {
-        background: linear-gradient(90deg, #111827 0%, #111827 36%, #6b7280 54%, #111827 72%, #111827 100%);
+        background: linear-gradient(90deg, #241452 0%, #241452 36%, #7848f8 54%, #241452 72%, #241452 100%);
         background-size: 220% 100%;
         -webkit-background-clip: text;
         background-clip: text;
@@ -150,7 +150,7 @@
     }
 
     .dark .ai-title-aurora {
-        background: linear-gradient(90deg, #fafaf9 0%, #fafaf9 36%, #a8a29e 54%, #fafaf9 72%, #fafaf9 100%);
+        background: linear-gradient(90deg, #ede9ff 0%, #ede9ff 36%, #b9a5ff 54%, #ede9ff 72%, #ede9ff 100%);
         background-size: 220% 100%;
         -webkit-background-clip: text;
         background-clip: text;

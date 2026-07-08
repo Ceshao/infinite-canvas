@@ -5,6 +5,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 
 import { navigationTools, type NavigationToolSlug } from "@/constant/navigation-tools";
+import { BRAND } from "@/constant/brand";
 import { AccessCodeModal } from "@/components/layout/access-code-modal";
 import { AppConfigModal } from "@/components/layout/app-config-modal";
 import { MobileNavDrawer } from "@/components/layout/mobile-nav-drawer";
@@ -27,15 +28,9 @@ export function AppTopNav() {
                 <header className="sticky top-0 z-20 h-16 shrink-0 border-b border-stone-200 bg-background/90 backdrop-blur-xl dark:border-stone-800">
                     <div className="mx-auto flex h-full max-w-7xl items-stretch justify-between gap-5 px-6">
                         <div className="flex min-w-0 items-center">
-                            <Link href="/" className="flex h-full shrink-0 items-center gap-2 text-sm font-semibold leading-none tracking-tight text-stone-950 transition hover:text-stone-600 dark:text-stone-100 dark:hover:text-stone-300">
-                                <span
-                                    className="size-5 shrink-0 bg-current"
-                                    style={{
-                                        mask: "url(/logo.svg) center / contain no-repeat",
-                                        WebkitMask: "url(/logo.svg) center / contain no-repeat",
-                                    }}
-                                />
-                                <span className="text-base font-medium">无限画布</span>
+                            <Link href="/" className="flex h-full shrink-0 items-center gap-2 text-sm font-semibold leading-none tracking-tight text-stone-950 transition hover:opacity-80 dark:text-stone-100">
+                                <img src={BRAND.mark} alt="" className="size-6 shrink-0" />
+                                <span className="text-base font-medium">{BRAND.name}</span>
                             </Link>
 
                             <button

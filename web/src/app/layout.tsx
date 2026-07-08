@@ -2,13 +2,14 @@ import type { Metadata } from "next";
 import Script from "next/script";
 import { AntdRegistry } from "@ant-design/nextjs-registry";
 import { AppProviders } from "@/components/layout/app-providers";
+import { BRAND } from "@/constant/brand";
 import "antd/dist/reset.css";
 import "./globals.css";
 import React from "react";
 
 export const metadata: Metadata = {
-    title: "无限画布",
-    description: "一个无限画布创作工具",
+    title: BRAND.name,
+    description: BRAND.description,
 };
 
 export default function RootLayout({

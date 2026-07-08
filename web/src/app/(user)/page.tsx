@@ -6,6 +6,7 @@ import { App, Button, Image, Tag } from "antd";
 
 import { fetchPrompts, type Prompt } from "@/services/api/prompts";
 import { navigationTools } from "@/constant/navigation-tools";
+import { BRAND } from "@/constant/brand";
 import { cn } from "@/lib/utils";
 
 function Highlighter({ action, color, children }: { action: "highlight" | "underline"; color: string; children: ReactNode }) {
@@ -41,14 +42,20 @@ export default function IndexPage() {
                 <div className="pointer-events-none absolute right-[23%] top-[48%] size-20 rounded-full border border-dashed border-stone-200 dark:border-stone-800" />
 
                 <div className="relative flex min-h-[620px] flex-col items-center justify-center pt-10 text-center">
-                    <h1 className="ai-title-aurora max-w-5xl text-balance text-5xl font-semibold tracking-normal sm:text-7xl lg:text-8xl">无限画布</h1>
+                    <div className="mb-5 flex items-center gap-2 text-sm font-medium tracking-wide text-stone-500 dark:text-stone-400">
+                        <img src={BRAND.mark} alt="" className="size-5" />
+                        <span>{BRAND.company}</span>
+                        <span className="text-stone-300 dark:text-stone-600">·</span>
+                        <span className="uppercase tracking-widest text-stone-400 dark:text-stone-500">{BRAND.companyEn}</span>
+                    </div>
+                    <h1 className="ai-title-aurora max-w-5xl text-balance text-5xl font-semibold tracking-normal sm:text-7xl lg:text-8xl">{BRAND.product}</h1>
                     <p className="mt-8 max-w-3xl text-balance text-lg leading-8 text-stone-500 dark:text-stone-400">
                         在
-                        <Highlighter action="underline" color="#FF9800">
-                            无限画布
+                        <Highlighter action="underline" color="#7848F8">
+                            {BRAND.product}
                         </Highlighter>
                         中生成、连接和重组
-                        <Highlighter action="highlight" color="#87CEFA">
+                        <Highlighter action="highlight" color="#C9BBFF">
                             图片、文字与图形
                         </Highlighter>
                         ，让创作从单次生成变成连续推演。
