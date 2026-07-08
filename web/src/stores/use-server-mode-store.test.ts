@@ -58,4 +58,12 @@ describe("buildServerConfigUpdates", () => {
         const updates = buildServerConfigUpdates(defaultConfig, "test-code", models);
         expect(updates.asyncImageModels).toEqual([]);
     });
+
+    test("名字不含图像关键词的异步图像模型被强制归入图像类、排除出文本类", () => {
+        // nano-2 不含 image/dall-e/flux 等关键词，默认会被误判为文本模型
+        const withNano = [...models, "nano-2"];
+        const updates = buildServerConfigUpdates(defaultConfig, "test-code", withNano, ["nano-2"]);
+        expect(updates.imageModels).toContain("server::nano-2");
+        expect(updates.textModels).not.toContain("server::nano-2");
+    });
 });

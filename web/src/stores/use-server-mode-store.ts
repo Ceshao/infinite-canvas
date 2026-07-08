@@ -2,7 +2,7 @@
 
 import { create } from "zustand";
 
-import { encodeChannelModel, filterModelsByCapability, useConfigStore, type AiConfig, type ModelChannel } from "@/stores/use-config-store";
+import { encodeChannelModel, modelMatchesCapability, useConfigStore, type AiConfig, type ModelChannel } from "@/stores/use-config-store";
 
 export const SERVER_CHANNEL_ID = "server";
 
@@ -67,10 +67,14 @@ export function applyServerConfig(code: string, models: string[], asyncImageMode
 export function buildServerConfigUpdates(config: AiConfig, code: string, models: string[], asyncImageModels: string[] = []): Partial<AiConfig> {
     const channel: ModelChannel = { id: SERVER_CHANNEL_ID, name: "服务器渠道", baseUrl: "/api/ai", apiKey: code, apiFormat: "openai", models };
     const encoded = models.map((model) => encodeChannelModel(SERVER_CHANNEL_ID, model));
-    const imageModels = filterModelsByCapability(encoded, "image");
-    const videoModels = filterModelsByCapability(encoded, "video");
-    const textModels = filterModelsByCapability(encoded, "text");
-    const audioModels = filterModelsByCapability(encoded, "audio");
+    // 异步图像模型（nano-2 等）名字里没有 image/flux 等关键词，能力分类器会误判为文本；
+    // 服务端既然声明它们是图像模型，这里强制归入图像类并从其他类排除。
+    const encodedAsyncImage = new Set(asyncImageModels.map((model) => encodeChannelModel(SERVER_CHANNEL_ID, model)));
+    const isAsyncImage = (model: string) => encodedAsyncImage.has(model);
+    const imageModels = encoded.filter((model) => isAsyncImage(model) || modelMatchesCapability(model, "image"));
+    const videoModels = encoded.filter((model) => !isAsyncImage(model) && modelMatchesCapability(model, "video"));
+    const textModels = encoded.filter((model) => !isAsyncImage(model) && modelMatchesCapability(model, "text"));
+    const audioModels = encoded.filter((model) => !isAsyncImage(model) && modelMatchesCapability(model, "audio"));
     const pick = (current: string, list: string[]) => (list.includes(current) ? current : list[0] || "");
     return {
         channels: [channel],
