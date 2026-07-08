@@ -1,6 +1,6 @@
 # MGDB 视频改经 new-api 异步转发
 
-日期：2026-07-08 ｜ 状态：实施中
+日期：2026-07-08 ｜ 状态：✅ 已完成并验收（当日）
 
 ## 目标
 
@@ -56,3 +56,21 @@
 
 cancanvas /video 用 mgdb-seedance-2.0 真实生成:浏览器仅调 /api/ai/v1/videos*;
 new-api 出现 relay 日志与计费记录;shim 收到 /v1/videos 调用;视频可播放/下载。
+
+## 验收结果（2026-07-08）
+
+- Playwright 真实用户路径：提交 `POST /api/ai/v1/videos` → 轮询 `GET /api/ai/v1/videos/task_*`，
+  不再出现任何 /api/mgdb 生成调用 ✅
+- new-api 计费日志：`channel_id:3, model:mgdb-seedance-2.0, request_path:/v1/videos, is_task:true` ✅
+- 成片经四跳链路（画布代理→new-api VideoProxy→shim content→网关 /files）下载 2.79MB 有效 MP4 ✅
+- 失败路径验证：网关内容审核拒绝的任务，错误信息完整回传到客户端 ✅
+
+## 运维备忘（排障时先看这里）
+
+1. **渠道密钥 = shim 的 SHIM_API_KEY**：渠道 #3 的 key（gw_key_ 前缀）被用作 shim 的共享口令，
+   shim 上游用自己的固定 GATEWAY_KEY。改任一侧必须同步另一侧，否则 401 "invalid api key"。
+2. **new-api `fetch_setting.allow_private_ip=true`**：VideoProxy 取件要访问私网的
+   video-gateway-shim:8080，SSRF 防护默认拒绝私网，此设置是取件链路的必要条件。
+3. 计费公式：ModelPrice(0.3) × seconds × group_ratio(1.5)，5 秒视频 = $2.25 内部额度；
+   调价在 new-api 后台模型价格处改 ModelPrice。
+4. 网关内容审核有波动（同提示词直连过、经转发拒），失败任务 new-api 侧按任务失败处理。
