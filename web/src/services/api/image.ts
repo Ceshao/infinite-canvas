@@ -20,10 +20,7 @@ export type ResponseToolCall = {
     thoughtSignature?: string;
 };
 
-export type ResponseInputMessage =
-    | AiTextMessage
-    | { type: "function_call"; call_id: string; name: string; arguments: string; thoughtSignature?: string }
-    | { role: "tool"; tool_call_id: string; content: string };
+export type ResponseInputMessage = AiTextMessage | { type: "function_call"; call_id: string; name: string; arguments: string; thoughtSignature?: string } | { role: "tool"; tool_call_id: string; content: string };
 
 export type ResponseFunctionTool = {
     type: "function";
@@ -43,10 +40,7 @@ export type ToolResponseResult = {
 type ToolChoice = "auto" | "required" | { type: "function"; name: string };
 type ResponseMessageContent = AiTextMessage["content"] | string;
 type ResponseInputContent = { type: "input_text"; text: string } | { type: "input_image"; image_url: string };
-type ResponseInputItem =
-    | { role: "system" | "user" | "assistant"; content: string | ResponseInputContent[] }
-    | { type: "function_call"; call_id: string; name: string; arguments: string }
-    | { type: "function_call_output"; call_id: string; output: string };
+type ResponseInputItem = { role: "system" | "user" | "assistant"; content: string | ResponseInputContent[] } | { type: "function_call"; call_id: string; name: string; arguments: string } | { type: "function_call_output"; call_id: string; output: string };
 type ResponseApiToolDefinition = {
     type: "function";
     name: string;
@@ -54,9 +48,7 @@ type ResponseApiToolDefinition = {
     parameters: Record<string, unknown>;
     strict?: boolean;
 };
-type ResponseApiOutputItem =
-    | { type?: "message"; content?: Array<{ type?: string; text?: string }> }
-    | { type?: "function_call"; id?: string; call_id?: string; name?: string; arguments?: string };
+type ResponseApiOutputItem = { type?: "message"; content?: Array<{ type?: string; text?: string }> } | { type?: "function_call"; id?: string; call_id?: string; name?: string; arguments?: string };
 type ResponseApiPayload = {
     id?: string;
     output?: ResponseApiOutputItem[];
@@ -112,6 +104,8 @@ const IMAGE_MAX_PIXELS = 8294400;
 const IMAGE_MAX_EDGE = 3840;
 const IMAGE_MAX_RATIO = 3;
 const IMAGE_OUTPUT_FORMAT = "png";
+const GEMINI_SUPPORTED_RATIOS = ["1:1", "1:4", "1:8", "2:3", "3:2", "3:4", "4:1", "4:3", "4:5", "5:4", "8:1", "9:16", "16:9", "21:9"];
+const GEMINI_IMAGE_SIZE_BY_QUALITY: Record<string, string> = { low: "1K", medium: "2K", high: "4K", standard: "1K", hd: "2K" };
 
 function normalizeQuality(quality: string) {
     const value = quality.trim().toLowerCase();
@@ -144,14 +138,19 @@ function resolveSize(quality: string | undefined, ratio: string): string {
     return `${width}x${height}`;
 }
 
-function parseImageRatio(value: string) {
+function parseRatioValue(value: string) {
     const parts = value.split(":");
     if (parts.length !== 2) throw new Error("图像尺寸格式不支持，请使用 auto、9:16 或 1024x1024");
     const w = Number(parts[0]);
     const h = Number(parts[1]);
     if (!Number.isFinite(w) || !Number.isFinite(h) || w <= 0 || h <= 0) throw new Error("图像比例必须是正数，例如 9:16");
-    if (Math.max(w, h) / Math.min(w, h) > IMAGE_MAX_RATIO) throw new Error("图像宽高比不能超过 3:1，请调整尺寸");
     return { width: w, height: h };
+}
+
+function parseImageRatio(value: string) {
+    const ratio = parseRatioValue(value);
+    if (Math.max(ratio.width, ratio.height) / Math.min(ratio.width, ratio.height) > IMAGE_MAX_RATIO) throw new Error("图像宽高比不能超过 3:1，请调整尺寸");
+    return ratio;
 }
 
 function parseImageDimensions(value: string) {
@@ -179,6 +178,45 @@ function resolveRequestSize(quality: string | undefined, size: string) {
     }
     if (value.includes(":")) return resolveSize(quality, value);
     throw new Error("图像尺寸格式不支持，请使用 auto、9:16 或 1024x1024");
+}
+
+// 上游此处用非官方的 responseFormat.image 字段；官方 Gemini API 是
+// generationConfig.imageConfig，Google 对未知字段会报 INVALID_ARGUMENT，
+// 故按官方字段移植（aspectRatio 全模型可用，imageSize 仅 gemini-3 系）。
+function resolveGeminiImageConfig(config: AiConfig) {
+    const value = config.size.trim();
+    const dimensions = parseImageDimensions(value);
+    const ratio = dimensions ? `${dimensions.width}:${dimensions.height}` : value;
+    const aspectRatio = value && value.toLowerCase() !== "auto" ? closestGeminiAspectRatio(ratio) : undefined;
+    const imageSize = supportsGeminiImageSize(config.model) ? resolveGeminiImageSize(config.quality, dimensions) : undefined;
+    const image = { ...(aspectRatio ? { aspectRatio } : {}), ...(imageSize ? { imageSize } : {}) };
+    return Object.keys(image).length ? { imageConfig: image } : {};
+}
+
+function closestGeminiAspectRatio(value: string) {
+    const ratio = parseImageRatio(value);
+    const target = ratio.width / ratio.height;
+    return GEMINI_SUPPORTED_RATIOS.reduce((best, item) => {
+        const current = parseRatioValue(item);
+        const bestRatio = parseRatioValue(best);
+        return Math.abs(current.width / current.height - target) < Math.abs(bestRatio.width / bestRatio.height - target) ? item : best;
+    });
+}
+
+function resolveGeminiImageSize(quality: string, dimensions: { width: number; height: number } | null) {
+    const normalizedQuality = normalizeQuality(quality);
+    if (normalizedQuality) return GEMINI_IMAGE_SIZE_BY_QUALITY[normalizedQuality];
+    if (!dimensions) return undefined;
+    const edge = Math.max(dimensions.width, dimensions.height);
+    if (edge <= 768) return "512";
+    if (edge <= 1536) return "1K";
+    if (edge <= 3072) return "2K";
+    return "4K";
+}
+
+function supportsGeminiImageSize(model: string) {
+    const value = model.toLowerCase();
+    return value.includes("gemini-3") || value.includes("3.1") || value.includes("3-pro");
 }
 
 function resolveImageDataUrl(item: Record<string, unknown>) {
@@ -495,12 +533,7 @@ async function requestStreamingResponse(config: AiConfig, body: Record<string, u
 }
 
 function toGeminiBody(config: AiConfig, messages: ResponseInputMessage[], extra?: Record<string, unknown>) {
-    const systemText = [
-        config.systemPrompt.trim(),
-        ...messages.flatMap((message) => (!("type" in message) && message.role === "system" ? [geminiTextContent(message.content)] : [])),
-    ]
-        .filter(Boolean)
-        .join("\n\n");
+    const systemText = [config.systemPrompt.trim(), ...messages.flatMap((message) => (!("type" in message) && message.role === "system" ? [geminiTextContent(message.content)] : []))].filter(Boolean).join("\n\n");
     const contents = toGeminiContents(messages.filter((message) => ("type" in message ? true : message.role !== "system")));
     return {
         contents,
@@ -560,10 +593,7 @@ function toGeminiToolOptions(tools: ResponseFunctionTool[], toolChoice: ToolChoi
         description: tool.function.description,
         parameters: tool.function.parameters,
     }));
-    const functionCallingConfig =
-        typeof toolChoice === "object"
-            ? { mode: "ANY", allowedFunctionNames: [toolChoice.name] }
-            : { mode: toolChoice === "required" ? "ANY" : "AUTO" };
+    const functionCallingConfig = typeof toolChoice === "object" ? { mode: "ANY", allowedFunctionNames: [toolChoice.name] } : { mode: toolChoice === "required" ? "ANY" : "AUTO" };
     return {
         tools: [{ functionDeclarations }],
         toolConfig: { functionCallingConfig },
@@ -660,7 +690,7 @@ async function requestGeminiImagesOnce(config: AiConfig, prompt: string, referen
     const response = await axios.post<GeminiPayload>(
         geminiApiUrl(config, "generateContent"),
         {
-            ...toGeminiBody(config, [{ role: "user", content: prompt }], { generationConfig: { responseModalities: ["TEXT", "IMAGE"] } }),
+            ...toGeminiBody(config, [{ role: "user", content: prompt }], { generationConfig: { responseModalities: ["TEXT", "IMAGE"], ...resolveGeminiImageConfig(config) } }),
             contents: [{ role: "user", parts }],
         },
         { headers: geminiHeaders(config), signal: options?.signal },
@@ -781,10 +811,18 @@ export async function requestImageQuestion(config: AiConfig, messages: AiTextMes
             if (answer === "没有返回内容") onDelta(answer);
             return answer;
         }
-        const answer = (await requestStreamingResponse(requestConfig, {
-            model: requestConfig.model,
-            input: toResponseInput(withSystemMessage(requestConfig, messages)),
-        }, onDelta, options)).content || "没有返回内容";
+        const answer =
+            (
+                await requestStreamingResponse(
+                    requestConfig,
+                    {
+                        model: requestConfig.model,
+                        input: toResponseInput(withSystemMessage(requestConfig, messages)),
+                    },
+                    onDelta,
+                    options,
+                )
+            ).content || "没有返回内容";
         if (answer === "没有返回内容") onDelta(answer);
         return answer;
     } catch (error) {
@@ -798,13 +836,18 @@ export async function requestToolResponse(config: AiConfig, messages: ResponseIn
         if (requestConfig.apiFormat === "gemini") {
             return await requestGeminiStreamingResponse(requestConfig, toGeminiBody(requestConfig, messages, toGeminiToolOptions(tools, toolChoice)), onDelta, options);
         }
-        return await requestStreamingResponse(requestConfig, {
-            model: requestConfig.model,
-            input: toResponseInput(withSystemMessage(requestConfig, messages)),
-            tools: tools.map(toResponseTool),
-            tool_choice: toolChoice,
-            parallel_tool_calls: false,
-        }, onDelta, options);
+        return await requestStreamingResponse(
+            requestConfig,
+            {
+                model: requestConfig.model,
+                input: toResponseInput(withSystemMessage(requestConfig, messages)),
+                tools: tools.map(toResponseTool),
+                tool_choice: toolChoice,
+                parallel_tool_calls: false,
+            },
+            onDelta,
+            options,
+        );
     } catch (error) {
         throw new Error(readAxiosError(error, "请求失败"));
     }
