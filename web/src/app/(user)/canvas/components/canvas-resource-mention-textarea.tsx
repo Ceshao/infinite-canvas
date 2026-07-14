@@ -6,6 +6,7 @@ import { createPortal } from "react-dom";
 import { FileText, Image as ImageIcon, Music2, Video } from "lucide-react";
 
 import { canvasThemes } from "@/lib/canvas-theme";
+import { isImeComposing, isPlainEnterKey } from "@/lib/keyboard-event";
 import { useThemeStore } from "@/stores/use-theme-store";
 import type { CanvasResourceReference } from "../utils/canvas-resource-references";
 
@@ -23,7 +24,10 @@ type Props = Omit<TextareaHTMLAttributes<HTMLTextAreaElement>, "onChange" | "val
     highlightLabels?: boolean;
 };
 
-export const CanvasResourceMentionTextarea = forwardRef<HTMLTextAreaElement, Props>(function CanvasResourceMentionTextarea({ value, references, onChange, onSubmit, onKeyDown, className, containerClassName, style, highlightLabels = true, ...props }, forwardedRef) {
+export const CanvasResourceMentionTextarea = forwardRef<HTMLTextAreaElement, Props>(function CanvasResourceMentionTextarea(
+    { value, references, onChange, onSubmit, onKeyDown, className, containerClassName, style, highlightLabels = true, ...props },
+    forwardedRef,
+) {
     const theme = canvasThemes[useThemeStore((state) => state.theme)];
     const textareaRef = useRef<HTMLTextAreaElement | null>(null);
     const overlayRef = useRef<HTMLDivElement | null>(null);
@@ -133,6 +137,10 @@ export const CanvasResourceMentionTextarea = forwardRef<HTMLTextAreaElement, Pro
                     props.onPointerUp?.(event);
                 }}
                 onKeyDown={(event) => {
+                    if (isImeComposing(event)) {
+                        onKeyDown?.(event);
+                        return;
+                    }
                     if (mention && candidates.length) {
                         if (event.key === "ArrowDown") {
                             event.preventDefault();
@@ -155,7 +163,7 @@ export const CanvasResourceMentionTextarea = forwardRef<HTMLTextAreaElement, Pro
                             return;
                         }
                     }
-                    if (event.key === "Enter" && onSubmit && !event.ctrlKey && !event.metaKey && !event.shiftKey) {
+                    if (isPlainEnterKey(event) && onSubmit) {
                         event.preventDefault();
                         onSubmit();
                         return;
@@ -196,7 +204,19 @@ function MentionHighlightText({ value, labels, placeholder }: { value: string; l
     );
 }
 
-function MentionMenu({ textarea, references, activeIndex, theme, onSelect }: { textarea: HTMLTextAreaElement; references: CanvasResourceReference[]; activeIndex: number; theme: (typeof canvasThemes)[keyof typeof canvasThemes]; onSelect: (reference: CanvasResourceReference) => void }) {
+function MentionMenu({
+    textarea,
+    references,
+    activeIndex,
+    theme,
+    onSelect,
+}: {
+    textarea: HTMLTextAreaElement;
+    references: CanvasResourceReference[];
+    activeIndex: number;
+    theme: (typeof canvasThemes)[keyof typeof canvasThemes];
+    onSelect: (reference: CanvasResourceReference) => void;
+}) {
     const selectedRef = useRef(false);
     const rect = textarea.getBoundingClientRect();
     const boundary = textarea.closest(".ant-modal-content")?.getBoundingClientRect() || { left: 8, top: 8, right: window.innerWidth - 8, bottom: window.innerHeight - 8 };
