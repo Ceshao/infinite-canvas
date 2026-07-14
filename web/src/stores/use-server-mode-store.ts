@@ -5,10 +5,11 @@ import { create } from "zustand";
 import { encodeChannelModel, modelMatchesCapability, useConfigStore, type AiConfig, type ModelChannel } from "@/stores/use-config-store";
 
 export const SERVER_CHANNEL_ID = "server";
+export const SERVER_GEMINI_CHANNEL_ID = "server-gemini";
 
 export type ServerModeStatus = "unknown" | "off" | "on";
 
-type ServerConfigResponse = { serverMode?: boolean; valid?: boolean; models?: string[]; asyncImageModels?: string[]; modelsError?: string; error?: { message?: string } };
+type ServerConfigResponse = { serverMode?: boolean; valid?: boolean; models?: string[]; asyncImageModels?: string[]; geminiModels?: string[]; modelsError?: string; error?: { message?: string } };
 
 type ServerModeStore = {
     status: ServerModeStatus;
@@ -45,7 +46,7 @@ export const useServerModeStore = create<ServerModeStore>()((set, get) => ({
             const response = await fetch("/api/ai-config", { headers: { authorization: `Bearer ${trimmed}` }, cache: "no-store" });
             const payload = (await response.json()) as ServerConfigResponse;
             if (!response.ok || !payload.valid) return { ok: false, message: payload.error?.message || "访问码无效或已停用" };
-            applyServerConfig(trimmed, payload.models || [], payload.asyncImageModels || []);
+            applyServerConfig(trimmed, payload.models || [], payload.asyncImageModels || [], payload.geminiModels || []);
             return { ok: true, message: payload.modelsError };
         } catch {
             return { ok: false, message: "网络错误，请稍后重试" };
@@ -58,15 +59,21 @@ function storedAccessCode() {
     return channel?.apiKey?.trim() || "";
 }
 
-export function applyServerConfig(code: string, models: string[], asyncImageModels: string[] = []) {
+export function applyServerConfig(code: string, models: string[], asyncImageModels: string[] = [], geminiModels: string[] = []) {
     const { config, updateConfig } = useConfigStore.getState();
-    const updates = buildServerConfigUpdates(config, code, models, asyncImageModels);
+    const updates = buildServerConfigUpdates(config, code, models, asyncImageModels, geminiModels);
     for (const [key, value] of Object.entries(updates)) updateConfig(key as keyof AiConfig, value as never);
 }
 
-export function buildServerConfigUpdates(config: AiConfig, code: string, models: string[], asyncImageModels: string[] = []): Partial<AiConfig> {
-    const channel: ModelChannel = { id: SERVER_CHANNEL_ID, name: "服务器渠道", baseUrl: "/api/ai", apiKey: code, apiFormat: "openai", models };
-    const encoded = models.map((model) => encodeChannelModel(SERVER_CHANNEL_ID, model));
+export function buildServerConfigUpdates(config: AiConfig, code: string, models: string[], asyncImageModels: string[] = [], geminiModels: string[] = []): Partial<AiConfig> {
+    // Gemini 原生格式模型（如 gemini-3-pro-image-preview）：new-api 的 OpenAI images
+    // 接口拒绝这类模型，必须经 /v1beta …:generateContent 调用，故单独成一个渠道；
+    // baseUrl 与访问码同 OpenAI 渠道，两种协议共用同一个 /api/ai 代理。
+    const geminiSet = new Set(geminiModels);
+    const openaiModels = models.filter((model) => !geminiSet.has(model));
+    const channels: ModelChannel[] = [{ id: SERVER_CHANNEL_ID, name: "服务器渠道", baseUrl: "/api/ai", apiKey: code, apiFormat: "openai", models: openaiModels }];
+    if (geminiModels.length) channels.push({ id: SERVER_GEMINI_CHANNEL_ID, name: "服务器渠道（Gemini）", baseUrl: "/api/ai", apiKey: code, apiFormat: "gemini", models: geminiModels });
+    const encoded = [...openaiModels.map((model) => encodeChannelModel(SERVER_CHANNEL_ID, model)), ...geminiModels.map((model) => encodeChannelModel(SERVER_GEMINI_CHANNEL_ID, model))];
     // 异步图像模型（nano-2 等）名字里没有 image/flux 等关键词，能力分类器会误判为文本；
     // 服务端既然声明它们是图像模型，这里强制归入图像类并从其他类排除。
     const encodedAsyncImage = new Set(asyncImageModels.map((model) => encodeChannelModel(SERVER_CHANNEL_ID, model)));
@@ -77,7 +84,7 @@ export function buildServerConfigUpdates(config: AiConfig, code: string, models:
     const audioModels = encoded.filter((model) => !isAsyncImage(model) && modelMatchesCapability(model, "audio"));
     const pick = (current: string, list: string[]) => (list.includes(current) ? current : list[0] || "");
     return {
-        channels: [channel],
+        channels,
         models: encoded,
         imageModels,
         videoModels,

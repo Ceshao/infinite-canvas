@@ -26,9 +26,20 @@ export function readMgdbProxyConfig(env: Record<string, string | undefined> = pr
 // 服务端声明哪些图像模型走异步任务链路（new-api Sora 任务中继 → image shim），
 // 未配置时前端保持原同步 /images/* 行为。
 export function parseAsyncImageModels(env: Record<string, string | undefined> = process.env): string[] {
+    return parseModelListEnv(env.AI_PROXY_ASYNC_IMAGE_MODELS);
+}
+
+// 服务端声明哪些模型必须走 Gemini 原生调用格式（/v1beta …:generateContent）。
+// new-api 的 OpenAI images 接口会拒绝 gemini 生图模型（only imagen models are
+// supported），前端据此清单生成第二个 Gemini 格式的服务器渠道。
+export function parseGeminiModels(env: Record<string, string | undefined> = process.env): string[] {
+    return parseModelListEnv(env.AI_PROXY_GEMINI_MODELS);
+}
+
+function parseModelListEnv(value: string | undefined): string[] {
     return Array.from(
         new Set(
-            (env.AI_PROXY_ASYNC_IMAGE_MODELS || "")
+            (value || "")
                 .split(",")
                 .map((model) => model.trim())
                 .filter(Boolean),

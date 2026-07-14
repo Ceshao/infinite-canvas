@@ -7,7 +7,7 @@ const storage = new Map<string, string>();
     removeItem: (key: string) => void storage.delete(key),
 };
 
-const { SERVER_CHANNEL_ID, buildServerConfigUpdates } = await import("@/stores/use-server-mode-store");
+const { SERVER_CHANNEL_ID, SERVER_GEMINI_CHANNEL_ID, buildServerConfigUpdates } = await import("@/stores/use-server-mode-store");
 const { defaultConfig } = await import("@/stores/use-config-store");
 
 const models = ["gpt-image-2", "seedance-pro", "gpt-5.5", "gpt-4o-mini-tts"];
@@ -65,5 +65,34 @@ describe("buildServerConfigUpdates", () => {
         const updates = buildServerConfigUpdates(defaultConfig, "test-code", withNano, ["nano-2"]);
         expect(updates.imageModels).toContain("server::nano-2");
         expect(updates.textModels).not.toContain("server::nano-2");
+    });
+
+    test("下发 Gemini 模型清单时生成第二个 Gemini 格式渠道，baseUrl 与访问码同 OpenAI 渠道", () => {
+        const withGemini = [...models, "gemini-3-pro-image-preview"];
+        const updates = buildServerConfigUpdates(defaultConfig, "test-code", withGemini, [], ["gemini-3-pro-image-preview"]);
+        expect(updates.channels).toEqual([
+            { id: SERVER_CHANNEL_ID, name: "服务器渠道", baseUrl: "/api/ai", apiKey: "test-code", apiFormat: "openai", models },
+            { id: SERVER_GEMINI_CHANNEL_ID, name: "服务器渠道（Gemini）", baseUrl: "/api/ai", apiKey: "test-code", apiFormat: "gemini", models: ["gemini-3-pro-image-preview"] },
+        ]);
+    });
+
+    test("Gemini 模型编码到 Gemini 渠道并从 OpenAI 渠道剔除，生图模型归图像类", () => {
+        const withGemini = [...models, "gemini-3-pro-image-preview"];
+        const updates = buildServerConfigUpdates(defaultConfig, "test-code", withGemini, [], ["gemini-3-pro-image-preview"]);
+        expect(updates.models).toContain("server-gemini::gemini-3-pro-image-preview");
+        expect(updates.models).not.toContain("server::gemini-3-pro-image-preview");
+        expect(updates.imageModels).toContain("server-gemini::gemini-3-pro-image-preview");
+    });
+
+    test("Gemini 清单里的模型即使不在上游模型列表也进入 Gemini 渠道", () => {
+        const updates = buildServerConfigUpdates(defaultConfig, "test-code", models, [], ["gemini-2.5-flash-image"]);
+        expect(updates.channels?.[1]?.models).toEqual(["gemini-2.5-flash-image"]);
+        expect(updates.models).toContain("server-gemini::gemini-2.5-flash-image");
+    });
+
+    test("未下发 Gemini 模型时只有一个 OpenAI 渠道（保持原行为）", () => {
+        const updates = buildServerConfigUpdates(defaultConfig, "test-code", models);
+        expect(updates.channels).toHaveLength(1);
+        expect(updates.channels?.[0]?.apiFormat).toBe("openai");
     });
 });

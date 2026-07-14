@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 
-import { buildForwardHeaders, buildUpstreamUrl, parseAccessCodes, parseAsyncImageModels, parseModelsPayload, readAccessCode, readMgdbProxyConfig, readServerProxyConfig, safeEqualSecret } from "@/lib/ai-proxy";
+import { buildForwardHeaders, buildUpstreamUrl, parseAccessCodes, parseAsyncImageModels, parseGeminiModels, parseModelsPayload, readAccessCode, readMgdbProxyConfig, readServerProxyConfig, safeEqualSecret } from "@/lib/ai-proxy";
 
 describe("parseAccessCodes", () => {
     test("按逗号分隔并去除空白项", () => {
@@ -21,6 +21,17 @@ describe("parseAsyncImageModels", () => {
     test("未配置或为空时返回空数组（功能关闭，行为与原版一致）", () => {
         expect(parseAsyncImageModels({})).toEqual([]);
         expect(parseAsyncImageModels({ AI_PROXY_ASYNC_IMAGE_MODELS: "  " })).toEqual([]);
+    });
+});
+
+describe("parseGeminiModels", () => {
+    test("按逗号分隔、去空白、保持顺序去重", () => {
+        expect(parseGeminiModels({ AI_PROXY_GEMINI_MODELS: " gemini-3-pro-image-preview, gemini-2.5-flash-image,,gemini-3-pro-image-preview " })).toEqual(["gemini-3-pro-image-preview", "gemini-2.5-flash-image"]);
+    });
+
+    test("未配置或为空时返回空数组（不生成 Gemini 渠道）", () => {
+        expect(parseGeminiModels({})).toEqual([]);
+        expect(parseGeminiModels({ AI_PROXY_GEMINI_MODELS: "  " })).toEqual([]);
     });
 });
 
