@@ -5,7 +5,7 @@ import { ArrowUp, LoaderCircle, Square } from "lucide-react";
 import { Button } from "antd";
 
 import { ModelPicker } from "@/components/model-picker";
-import { defaultConfig, useConfigStore, useEffectiveConfig, type AiConfig } from "@/stores/use-config-store";
+import { defaultConfig, modelMatchesCapability, selectableModelsByCapability, useConfigStore, useEffectiveConfig, type AiConfig, type ModelCapability } from "@/stores/use-config-store";
 import { CreditSymbol, requestCreditCost } from "@/constant/credits";
 import { canvasThemes } from "@/lib/canvas-theme";
 import { useThemeStore } from "@/stores/use-theme-store";
@@ -141,10 +141,18 @@ function defaultMode(type: CanvasNodeData["type"]): CanvasNodeGenerationMode {
 }
 
 function buildNodeConfig(globalConfig: AiConfig, node: CanvasNodeData, mode: CanvasNodeGenerationMode): AiConfig {
+    const capability: ModelCapability = mode === "image" || mode === "video" || mode === "audio" ? mode : "text";
     const defaultModel = mode === "image" ? globalConfig.imageModel : mode === "video" ? globalConfig.videoModel : mode === "audio" ? globalConfig.audioModel : globalConfig.textModel;
+    const fallbackModel = mode === "image" ? defaultConfig.imageModel : mode === "video" ? defaultConfig.videoModel : mode === "audio" ? defaultConfig.audioModel : defaultConfig.textModel;
+    // 优先用配置里已归类的能力清单判断模型是否匹配当前模式：服务端模式的
+    // 异步图像模型（nano-2 等）名字不含图像关键词，按名字匹配会被误判。
+    const capabilityModels = selectableModelsByCapability(globalConfig, capability);
+    const matchesMode = (model: string | undefined) => Boolean(model && (capabilityModels.length ? capabilityModels.includes(model) : modelMatchesCapability(model, capability)));
+    const currentModel = node.metadata?.model;
+    const model = currentModel && matchesMode(currentModel) ? currentModel : defaultModel && matchesMode(defaultModel) ? defaultModel : fallbackModel;
     return {
         ...globalConfig,
-        model: node.metadata?.model || defaultModel || (mode === "audio" ? defaultConfig.audioModel : globalConfig.model || defaultConfig.model),
+        model,
         quality: node.metadata?.quality || globalConfig.quality || defaultConfig.quality,
         size: node.metadata?.size || globalConfig.size || defaultConfig.size,
         videoSeconds: node.metadata?.seconds || globalConfig.videoSeconds || defaultConfig.videoSeconds,
